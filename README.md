@@ -39,3 +39,9 @@ Set in a `.env` file at the project root (not committed):
 - `SESSION_SECRET` - session cookie signing key
 
 See `docs/PLAN.md` for the build plan and `docs/DATABASE.md` for the schema.
+
+Manual AI connectivity check (requires login session cookie):
+
+```bash
+curl -X POST http://localhost:8000/api/ai/connectivity -b cookies.txt
+```

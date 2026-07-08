@@ -1,6 +1,6 @@
 # Database design
 
-SQLite database for the Kanban PM app. The schema supports multiple users (for the future) but the MVP uses exactly one board per user. This document is the source of truth for Part 6 (backend API) and needs sign-off before implementation.
+SQLite database for the Kanban PM app. The schema supports multiple users (for the future) but the MVP uses exactly one board per user. **Implemented in Part 6** (`backend/app/models.py`, `board_service.py`). This document remains the schema reference for Part 9 (AI board updates).
 
 ## Goals
 

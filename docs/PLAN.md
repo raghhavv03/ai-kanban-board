@@ -2,6 +2,25 @@
 
 A single-board Kanban PM app: NextJS frontend (static export) served by a Python FastAPI backend, SQLite storage, and an AI chat sidebar (OpenRouter, `openai/gpt-oss-120b`) that can create/edit/move cards. Everything runs locally in one Docker container.
 
+## Current status
+
+| Part | Title | Status |
+|------|-------|--------|
+| 1 | Plan | Complete |
+| 2 | Scaffolding (Docker + FastAPI) | Complete |
+| 3 | Integrate frontend (static export) | Complete |
+| 4 | Fake user sign-in | Complete |
+| 5 | Database modeling | Complete (schema implemented in Part 6) |
+| 6 | Backend Kanban API | Complete |
+| 7 | Connect frontend to backend | Complete (incl. drag-and-drop fixes) |
+| 8 | AI connectivity | Complete |
+| 9 | AI with board context + Structured Outputs | **Next** |
+| 10 | AI chat sidebar UI | Not started |
+
+**For a new chat session:** Parts 1-8 are done. Begin at **Part 9** below. Read root `AGENTS.md`, then `backend/AGENTS.md` and `frontend/AGENTS.md`, before coding.
+
+**Test suites (all green after Part 8):** 32 backend pytest (1 live AI test skipped without key), 32 frontend Vitest, 14 Playwright e2e.
+
 ## How to use this document
 
 Each part below has substeps as a checklist, plus tests and success criteria. Work through parts in order. Do not start a part until the previous part's success criteria are met. Check off substeps as they are completed.
@@ -26,7 +45,7 @@ Enrich this plan and describe the existing frontend, then get sign-off.
 
 - [x] Enrich `docs/PLAN.md` with per-part checklists, tests, and success criteria
 - [x] Create `frontend/AGENTS.md` describing the existing frontend code
-- [ ] User reviews and approves the plan and the assumptions above
+- [x] User reviews and approves the plan and the assumptions above (proceeded with implementation)
 
 Tests / verification:
 - N/A (documentation only)
@@ -109,7 +128,7 @@ Design and document the SQLite schema; get sign-off before implementing routes.
 - [x] Define the JSON shape the API will exchange with the frontend (mirrors current `BoardState`)
 - [x] Document schema, relationships, ordering strategy, and seed behavior in `docs/DATABASE.md`
 - [x] Decide access approach (raw `sqlite3` vs SQLAlchemy) - default: SQLAlchemy for clarity, kept minimal
-- [ ] User signs off on `docs/DATABASE.md`
+- [x] User signs off on `docs/DATABASE.md` (proceeded with Part 6 implementation)
 
 Tests / verification:
 - N/A (design doc); review only
@@ -147,14 +166,30 @@ Replace in-memory state with real API calls for a persistent board.
 - [x] Load board from backend after auth; render loading/error states
 - [x] Wire rename column, add/edit/delete card, and move card to backend, updating UI optimistically with reconciliation on response
 - [x] Remove reliance on `dummyData` for runtime state (keep only for tests/seed reference)
+- [x] Fix drag-and-drop bugs discovered after initial Part 7 wiring (see notes below)
+
+### Part 7 notes: drag-and-drop fixes (completed)
+
+Three rounds of drag-and-drop fixes were applied after Part 7. Root causes and fixes:
+
+1. **Wrong column highlighted / card jumps to random column:** Backend column ids and card ids are independent integer sequences (e.g. card `4` and column `4` both exist). Column droppables used raw column ids, colliding with card ids in `resolveOverColumn`. **Fix:** namespace column droppable ids as `col-<id>` and `col-<id>-end` in `frontend/src/lib/dropIndex.ts` and `Column.tsx`.
+
+2. **Stale droppable rects mid-drag:** Column heights change as cards move; dnd-kit rects went stale. **Fix:** `MeasuringStrategy.Always` on `DndContext`; custom collision detection using `pointerWithin` (fallback `rectIntersection`) to find the column under the pointer.
+
+3. **Cannot drop above a card (always lands below):** `computeDropIndex` only read `MouseEvent` but `PointerSensor` fires `PointerEvent`, so pointer Y was unavailable and the code fell back to the dragged card's center (wrong with `DragOverlay`, especially for tall cards). **Fix:** use dnd-kit `getEventCoordinates(activatorEvent) + delta.y` for pointer Y; collision picks insertion anchor by walking cards top-to-bottom (first card whose midpoint is below the pointer); use `onDragMove` (not only `onDragOver`) for continuous tracking; finalize position on `onDragEnd`.
+
+Key files: `frontend/src/lib/dropIndex.ts`, `frontend/src/components/Board.tsx`, `frontend/src/components/Column.tsx`.
+
+E2e coverage in `frontend/e2e/kanban.spec.ts`: cross-column drag, first position, same-column reorder above, drop above specific card, tall card above shorter card; all assert persistence after reload.
 
 Tests / verification:
-- Frontend Vitest: API client and hook logic with a mocked fetch (success + error)
-- Playwright e2e against the running container: perform each operation, reload page, confirm changes persisted
+- Frontend Vitest: API client and hook logic with a mocked fetch (success + error); drop-index unit tests including pointer-based before/after placement
+- Playwright e2e against the running container: perform each operation, reload page, confirm changes persisted; drag tests for cross-column, first position, above-card, same-column reorder, tall-card-above-short-card
 - Backend tests remain green
 
 Success criteria:
 - The board is fully persistent end-to-end; a reload preserves all changes; all tests pass
+- Drag-and-drop reliably highlights the intended column and supports precise above/below placement
 
 ---
 
@@ -162,10 +197,15 @@ Success criteria:
 
 Prove OpenRouter connectivity from the backend.
 
-- [ ] Load `OPENROUTER_API_KEY` from `.env` (never commit real key; already gitignored)
-- [ ] Backend AI client calling OpenRouter with model `openai/gpt-oss-120b`
-- [ ] Temporary/verified test path that asks "what is 2+2" and confirms a sane response
-- [ ] Handle missing key / network error gracefully
+- [x] Load `OPENROUTER_API_KEY` from `.env` (never commit real key; already gitignored)
+- [x] Backend AI client calling OpenRouter with model `openai/gpt-oss-120b`
+- [x] Temporary/verified test path that asks "what is 2+2" and confirms a sane response
+- [x] Handle missing key / network error gracefully
+
+Implementation:
+- `backend/app/ai_client.py` - `complete()` sends chat completions to OpenRouter via `httpx`; raises `AIConfigError` (missing key) or `AIRequestError` (HTTP/parse failures)
+- `backend/app/ai.py` - auth-protected `POST /api/ai/connectivity` asks "What is 2+2?" and returns `{ model, answer }`; 503 if key missing, 502 if OpenRouter fails
+- `backend/tests/test_ai.py` - unit tests with mocked OpenRouter; live test skipped when `OPENROUTER_API_KEY` unset
 
 Tests / verification:
 - A connectivity test (guarded so CI without a key skips) that sends "2+2" and asserts the response contains "4"
@@ -177,6 +217,8 @@ Success criteria:
 ---
 
 ## Part 9: AI with board context + Structured Outputs
+
+**This is the next part to implement.**
 
 Send the board JSON + user question + history; get a structured response with an optional board update.
 

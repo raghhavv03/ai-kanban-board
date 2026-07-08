@@ -28,9 +28,17 @@ For the MVP, this will run locally (in a docker container)
 - Use SQLLite local database for the database, creating a new db if it doesn't exist
 - Start and Stop server scripts for Mac, PC, Linux in scripts/
 
-## Starting Point
+## Project status (as of Part 8 complete)
 
-A working MVP of the frontend has been built and is already in frontend. This is not yet designed for the Docker setup. It's a pure frontend-only demo.
+**Done:** Parts 1-8. The app is a fully persistent Kanban board with OpenRouter AI connectivity verified from the backend (`POST /api/ai/connectivity`).
+
+**Not started:** Parts 9-10 (structured-output chat API with board context, chat sidebar UI).
+
+**Next step for a new session:** Start **Part 9** in `docs/PLAN.md` (AI with board context + Structured Outputs). Read `docs/PLAN.md` first, then `backend/AGENTS.md` and `frontend/AGENTS.md` for code layout.
+
+## Starting point (historical)
+
+The repo began with a working frontend-only Kanban demo in `frontend/`. That demo has since been integrated into the Docker/FastAPI stack, wired to auth and a persistent backend, and is no longer in-memory-only.
 
 ## Color Scheme
 
@@ -49,5 +57,30 @@ A working MVP of the frontend has been built and is already in frontend. This is
 
 ## Working documentation
 
-All documents for planning and executing this project will be in the docs/ directory.
-Please review the docs/PLAN.md document before proceeding.
+All documents for planning and executing this project will be in the `docs/` directory.
+
+| Document | Purpose |
+|----------|---------|
+| `docs/PLAN.md` | Build plan with per-part checklists, tests, success criteria. **Read this first.** |
+| `docs/DATABASE.md` | SQLite schema, API JSON shape, seed behavior |
+
+Code-specific guides (read after the plan):
+
+| Document | Purpose |
+|----------|---------|
+| `frontend/AGENTS.md` | Frontend stack, layout, state, drag-and-drop, tests |
+| `backend/AGENTS.md` | Backend stack, routes, DB layer, config, tests |
+| `scripts/AGENTS.md` | Docker start/stop scripts |
+
+## Running and testing
+
+See root `README.md`. Quick reference:
+
+```bash
+./scripts/start.sh              # Docker at http://localhost:8000
+cd backend && uv run pytest     # 32 backend tests (1 live AI test skipped without OPENROUTER_API_KEY)
+cd frontend && npm run test     # 32 unit/component tests
+cd frontend && npm run test:e2e # 14 Playwright e2e tests
+```
+
+Sign in with `user` / `password`.

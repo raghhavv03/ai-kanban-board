@@ -1,6 +1,6 @@
 # Frontend
 
-NextJS (App Router) + React + TypeScript + Tailwind CSS v4 Kanban board. Built as a static export (`output: "export"` in `next.config.ts`, emitted to `out/`) and served by the FastAPI backend at `/`. Currently client-only with in-memory state and dummy data; backend persistence is added in Part 7.
+NextJS (App Router) + React + TypeScript + Tailwind CSS v4 Kanban board. Built as a static export (`output: "export"` in `next.config.ts`, emitted to `out/`) and served by the FastAPI backend at `/`. Fully wired to the backend API for auth and persistent board state (Part 7 complete).
 
 ## Stack
 
@@ -14,26 +14,27 @@ NextJS (App Router) + React + TypeScript + Tailwind CSS v4 Kanban board. Built a
 ## Directory layout
 
 - `src/app/layout.tsx` - root layout, loads fonts, sets metadata, base body styles
-- `src/app/page.tsx` - home page. Uses `useAuth`: shows a loading spinner, then `LoginForm` if unauthenticated, otherwise the header (with logout button) + `Board`. `Board` is loaded with `next/dynamic` and `ssr: false` (drag/drop is client-only) with a skeleton loading state
-- `src/lib/api.ts` - fetch client for the backend API (auth: `getMe`/`login`/`logout`; board: `fetchBoard` + column/card mutation calls), sends cookies with `credentials: "include"`
+- `src/app/page.tsx` - home page. Uses `useAuth` and `useBoard`: loading spinner, then `LoginForm` if unauthenticated, otherwise header (logout) + board (loading/error/ready states). `Board` is loaded with `next/dynamic` and `ssr: false` (drag/drop is client-only) with a skeleton loading state
+- `src/lib/api.ts` - typed fetch client for `/api/*` (auth: `getMe`/`login`/`logout`; board: `fetchBoard`, `renameColumnApi`, `addCardApi`, `editCardApi`, `deleteCardApi`, `moveCardApi`). Sends cookies with `credentials: "include"`
 - `src/hooks/useAuth.ts` - auth state hook (`loading`/`authed`/`anon`), checks `/api/me` on load, exposes `login`/`logout`
-- `src/hooks/useBoard.ts` - board state hook. Takes an `enabled` flag (loads once authenticated), holds status (`loading`/`ready`/`error`), and exposes optimistic actions (rename/add/edit/delete) that reconcile with the server board, plus `moveCardLocal` (live drag) and `persistMove` (persist on drop)
+- `src/hooks/useBoard.ts` - board state hook. Takes `enabled` (true once authenticated). Status: `loading`/`ready`/`error`. Loads board from API, exposes optimistic mutations (rename/add/edit/delete) with server reconciliation, plus `moveCardLocal` (live drag) and `persistMove` (persist on drop)
 - `src/components/LoginForm.tsx` - sign-in form (username/password) with error state
-- `src/app/globals.css` - Tailwind import, brand color CSS variables, `@theme` mapping, reduced-motion handling
-- `src/types/board.ts` - core types: `Card`, `Column`, `BoardState`, `BoardAction`
-- `src/data/dummyData.ts` - `initialBoardState`: 5 seeded columns (Backlog, To Do, In Progress, Review, Done) and 9 cards
-- `src/lib/boardReducer.ts` - pure reducer handling `RENAME_COLUMN`, `ADD_CARD`, `EDIT_CARD`, `DELETE_CARD`, `MOVE_CARD`; generates card ids locally
-- `src/lib/dropIndex.ts` - drag/drop helpers: `columnDroppableId`/`columnEndId` (namespace column droppable ids as `col-<id>` so they never collide with numeric card ids), `resolveOverColumn`, `computeDropIndex`
-- `src/hooks/useBoard.ts` - `useReducer` wrapper exposing `{ state, dispatch }`
-- `src/components/Board.tsx` - `DndContext`, sensors, drag handlers, renders columns + `DragOverlay`. Custom collision detection (`pointerWithin` -> nearest card in the hovered column) plus `MeasuringStrategy.Always` so droppable rects stay accurate as cards shift columns mid-drag. Uses callback props: live drag reordering via `onMoveLocal`, persistence via `onPersistMove` on drop, and `onRenameColumn`/`onAddCard`/`onEditCard`/`onDeleteCard`
-- `src/components/Column.tsx` - a column with droppable body and an end-drop zone; renders `EditableColumnTitle`, cards, `AddCardForm`
-- `src/components/Card.tsx` - sortable card with title, details, hover-to-reveal edit and delete buttons; inline edit form (drag disabled while editing)
-- `src/components/AddCardForm.tsx` - inline add-card form (title + optional details)
-- `src/components/EditableColumnTitle.tsx` - click-to-edit column title (Enter saves, Escape cancels, blur saves)
+- `src/types/board.ts` - core types: `Card`, `Column`, `BoardState`, `BoardAction` (includes `SET_BOARD`, `EDIT_CARD`, `MOVE_CARD`, etc.)
+- `src/data/dummyData.ts` - `initialBoardState` used only in unit tests and as reference for seed data shape; runtime state comes from the API
+- `src/lib/boardReducer.ts` - pure reducer: `SET_BOARD`, `RENAME_COLUMN`, `ADD_CARD`, `EDIT_CARD`, `DELETE_CARD`, `MOVE_CARD` (uses `@dnd-kit/sortable` `arrayMove` for same-column moves)
+- `src/lib/dropIndex.ts` - drag/drop helpers:
+  - `columnDroppableId` / `columnEndId` - namespace column droppables as `col-<id>` so they never collide with numeric card ids from the backend
+  - `resolveOverColumn` - map a droppable id (column or card) to its column
+  - `computeDropIndex` - pointer-position-aware insert index (uses `getEventCoordinates` + `delta.y` from dnd-kit; falls back to active rect center)
+- `src/components/Board.tsx` - `DndContext` with custom collision detection, `onDragMove`/`onDragEnd`, `DragOverlay`, column highlight. Callback props: `onMoveLocal`, `onPersistMove`, `onRenameColumn`, `onAddCard`, `onEditCard`, `onDeleteCard`
+- `src/components/Column.tsx` - column UI with namespaced droppable body + end-drop zone; `SortableContext` for cards
+- `src/components/Card.tsx` - sortable card; inline edit form (drag disabled while editing)
+- `src/components/AddCardForm.tsx` - inline add-card form
+- `src/components/EditableColumnTitle.tsx` - click-to-edit column title
 
 ## State model
 
-State is a normalized board held in memory:
+State is a normalized board loaded from the backend:
 
 ```
 BoardState = {
@@ -42,32 +43,65 @@ BoardState = {
 }
 ```
 
-The board is loaded from the backend (`GET /api/board`) after login and held via `useBoard`. Local edits are applied optimistically through `boardReducer`, then reconciled with the authoritative board returned by each mutation endpoint. Cards can be added, edited, deleted, and moved. There is no add/remove column (columns are fixed, only renameable).
+Board ids are strings in the frontend (backend serializes integer DB ids as strings). Local edits are applied optimistically via `boardReducer`, then reconciled with the full board JSON returned by each mutation endpoint. On failure, the hook refetches the board.
 
 ## Data flow
 
-`page.tsx` -> `useBoard(enabled)` -> `<Board ...callbacks>` -> columns/cards. Board load happens after auth; UI events call the hook's action functions, which optimistically update local state and call the backend, then replace state with the server's board. Drag events are resolved into moves using `dropIndex.ts` helpers (local live reorder, persisted once on drop).
+`page.tsx` -> `useAuth` + `useBoard(enabled)` -> `<Board ...callbacks>` -> columns/cards.
+
+- Auth: `useBoard` only loads when `authStatus === "authed"`
+- Mutations: optimistic dispatch -> API call -> `SET_BOARD` with server response
+- Drag: `onMoveLocal` on every `onDragMove` (live reorder); `onPersistMove` on `onDragEnd` if position changed
+
+## Drag and drop (important details)
+
+Implemented in `Board.tsx` + `dropIndex.ts`. A new session working on the board or AI-driven moves should understand this:
+
+1. **Column/card id collision:** Backend assigns independent integer ids to columns and cards. Column droppables must use `col-<columnId>`, not raw column ids.
+
+2. **Collision detection:** Custom strategy on `DndContext`:
+   - Find column under pointer via `pointerWithin` (fallback `rectIntersection`)
+   - Within that column, walk cards top-to-bottom; first card whose midpoint is below the pointer is the insertion anchor
+   - `MeasuringStrategy.Always` keeps droppable rects accurate as cards shift mid-drag
+
+3. **Insert index:** `computeDropIndex` compares pointer Y to the target card's vertical midpoint (upper half = before, lower half = after). Must use `getEventCoordinates(activatorEvent) + delta.y` because `PointerSensor` fires `PointerEvent`, not `MouseEvent`.
+
+4. **DragOverlay:** The source card stays in the list at opacity 0; the overlay follows the pointer. Do not use the dragged card's rect center for placement logic.
 
 ## Styling / brand
 
-Brand colors are defined once in `globals.css` and referenced as Tailwind classes (e.g. `text-dark-navy`, `bg-purple-secondary`, `border-accent-yellow`): accent yellow `#ecad0a`, blue `#209dd7`, purple `#753991`, dark navy `#032147`, gray `#888888`.
+Brand colors in `globals.css`, referenced as Tailwind classes: accent yellow `#ecad0a`, blue `#209dd7`, purple `#753991`, dark navy `#032147`, gray `#888888`.
 
 ## Tests
 
-- Unit/component (Vitest): `src/lib/boardReducer.test.ts`, `src/lib/dropIndex.test.ts`, `src/components/components.test.tsx`; setup in `src/test/setup.ts`; config in `vitest.config.ts` (jsdom, `@` alias, excludes `e2e/`)
-- e2e (Playwright): `e2e/kanban.spec.ts` covers load, rename column, add card, delete card, cross-column drag, drag to last position; config in `playwright.config.ts` (builds+starts on port 3001)
+- **Vitest (32 tests):**
+  - `src/lib/boardReducer.test.ts` - reducer actions
+  - `src/lib/dropIndex.test.ts` - column resolution, pointer-based before/after index
+  - `src/hooks/useBoard.test.ts` - load, optimistic updates, error refetch (mocked fetch)
+  - `src/components/components.test.tsx` - LoginForm, Board callbacks
+  - Setup: `src/test/setup.ts`; config: `vitest.config.ts`
+
+- **Playwright e2e (14 tests) in `e2e/kanban.spec.ts`:**
+  - Auth: login required, invalid credentials, logout, session persistence
+  - Board: seeded data, rename/add/edit/delete with reload persistence
+  - Drag: cross-column, first position, same-column reorder above, drop above specific card, tall card above shorter card
+  - Config: `playwright.config.ts` builds static export and starts FastAPI with `STATIC_DIR=out`, `ALLOW_TEST_RESET=1` on port 3001
+  - `beforeEach` calls `POST /api/test/reset` to reseed the board
 
 ## Scripts
 
 - `npm run dev` - dev server
-- `npm run build` - production build
-- `npm run start` - serve production build
+- `npm run build` - static export to `out/`
 - `npm run lint` - eslint
 - `npm run test` / `test:watch` - Vitest
 - `npm run test:e2e` / `test:e2e:ui` - Playwright
 
 ## Build and serving
 
-- `next.config.ts` sets `output: "export"`; `npm run build` emits the static site to `out/`.
-- In Docker, the `out/` export is copied into `backend/app/static/` and served by FastAPI at `/`. e2e tests build the export and serve it via the FastAPI backend (`STATIC_DIR=out uv run uvicorn ...`) on port 3001 so the auth API is available.
-- The board is seeded from `dummyData.ts` and held in memory; this will be replaced by backend-persisted state in Part 7.
+- Docker multi-stage build runs `npm run build`; copies `out/` into `backend/app/static/`
+- FastAPI serves static files at `/`; API at `/api/*`
+- e2e tests use the same FastAPI-served static export (not `next dev`) so auth and board API are available
+
+## Not yet implemented (Parts 9-10)
+
+No AI chat sidebar or `/api/chat` integration yet. Part 9 adds structured-output chat on the backend; Part 10 adds the sidebar UI that calls it and refreshes the board.
