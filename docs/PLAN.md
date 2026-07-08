@@ -124,11 +124,11 @@ Success criteria:
 
 Implement persistent read/write of a user's Kanban, creating the DB if absent.
 
-- [ ] Create DB and tables on startup if missing; seed the fixed columns + demo cards for the user on first use
-- [ ] `GET /api/board` returns the authenticated user's board as JSON
-- [ ] Endpoints to rename a column, add/edit/delete a card, and move a card (with ordering)
-- [ ] Enforce auth on all board routes; scope all queries to the current user
-- [ ] Data access layer isolated from route handlers
+- [x] Create DB and tables on startup if missing; seed the fixed columns + demo cards for the user on first use
+- [x] `GET /api/board` returns the authenticated user's board as JSON
+- [x] Endpoints to rename a column, add/edit/delete a card, and move a card (with ordering)
+- [x] Enforce auth on all board routes; scope all queries to the current user
+- [x] Data access layer isolated from route handlers
 
 Tests / verification:
 - Backend unit/integration tests (pytest) against a temp SQLite DB: DB auto-creation, seeding, GET board shape, rename column, add/edit/delete card, move card (same + cross column ordering), auth enforcement (401)
