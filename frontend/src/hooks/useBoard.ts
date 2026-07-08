@@ -31,6 +31,16 @@ export function useBoard(enabled: boolean) {
     }
   }, []);
 
+  const refresh = useCallback(async () => {
+    try {
+      const board = await fetchBoard();
+      dispatch({ type: "SET_BOARD", board });
+      setStatus("ready");
+    } catch {
+      setStatus("error");
+    }
+  }, []);
+
   useEffect(() => {
     if (enabled) load();
   }, [enabled, load]);
@@ -126,6 +136,7 @@ export function useBoard(enabled: boolean) {
     state,
     status,
     reload: load,
+    refresh,
     renameColumn,
     addCard,
     editCard,

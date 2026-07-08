@@ -10,7 +10,7 @@ Start and stop scripts for running the Kanban app as a Docker container locally.
 1. Builds the Docker image `kanban-app` from the root `Dockerfile` (multi-stage: NextJS static build + Python/FastAPI runtime)
 2. Removes any existing `kanban-app` container
 3. Runs a new container mapping host port **8000** to container port **8000**
-4. If `.env` exists at the project root, passes it with `--env-file` (for `OPENROUTER_API_KEY`, `SESSION_SECRET`, etc.)
+4. If `.env` exists at the project root, passes it with `--env-file` (for `OPENAI_API_KEY`, `SESSION_SECRET`, etc.)
 
 ## What stop does
 

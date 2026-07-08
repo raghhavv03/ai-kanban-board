@@ -333,3 +333,43 @@ test.describe("Kanban Board", () => {
     ]);
   });
 });
+
+test.describe("AI chat", () => {
+  test("shows assistant reply and refreshes the board after an update", async ({
+    page,
+  }) => {
+    await login(page);
+    await page.getByTestId("chat-open").click();
+    await expect(page.getByTestId("chat-sidebar")).toBeVisible();
+
+    const boardRes = await page.request.get("/api/board");
+    const board = await boardRes.json();
+    const todo = board.columns.find(
+      (column: { title: string }) => column.title === "To Do"
+    );
+
+    await page.request.post(`/api/columns/${todo.id}/cards`, {
+      data: { title: "Sprint planning", details: "Plan the next sprint" },
+    });
+
+    await page.route("**/api/chat", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          reply: "I added Sprint planning to To Do.",
+          board_changed: true,
+          model: "test",
+        }),
+      });
+    });
+
+    await page.getByTestId("chat-input").fill("Add Sprint planning to To Do");
+    await page.getByTestId("chat-send").click();
+
+    await expect(
+      page.getByText("I added Sprint planning to To Do.")
+    ).toBeVisible();
+    await expect(cardByText(page, "Sprint planning")).toBeVisible();
+  });
+});

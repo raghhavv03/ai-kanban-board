@@ -3,7 +3,9 @@
 import dynamic from "next/dynamic";
 import { useBoard } from "@/hooks/useBoard";
 import { useAuth } from "@/hooks/useAuth";
+import { useChat } from "@/hooks/useChat";
 import { LoginForm } from "@/components/LoginForm";
+import { ChatSidebar } from "@/components/ChatSidebar";
 
 const Board = dynamic(
   () => import("@/components/Board").then((mod) => mod.Board),
@@ -28,6 +30,7 @@ const Board = dynamic(
 export default function Home() {
   const { status: authStatus, login, logout } = useAuth();
   const board = useBoard(authStatus === "authed");
+  const chat = useChat(board.refresh);
 
   if (authStatus === "loading") {
     return (
@@ -64,7 +67,7 @@ export default function Home() {
         </button>
       </header>
 
-      <div className="flex-1 p-6 overflow-hidden">
+      <div className="flex-1 min-h-0 p-6 overflow-hidden">
         {board.status === "error" ? (
           <div
             data-testid="board-error"
@@ -102,6 +105,15 @@ export default function Home() {
           />
         )}
       </div>
+
+      {board.status === "ready" && (
+        <ChatSidebar
+          messages={chat.messages}
+          loading={chat.loading}
+          error={chat.error}
+          onSend={chat.sendMessage}
+        />
+      )}
     </main>
   );
 }

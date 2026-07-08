@@ -1,34 +1,40 @@
+import json
 import os
 
 import httpx
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "openai/gpt-oss-120b"
+OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+DEFAULT_MODEL = "gpt-4o-mini"
+FALLBACK_MODEL = "gpt-4o"
 
 
 class AIConfigError(Exception):
-    """Raised when OPENROUTER_API_KEY is missing."""
+    """Raised when OPENAI_API_KEY is missing."""
 
 
 class AIRequestError(Exception):
-    """Raised when the OpenRouter request fails."""
+    """Raised when the OpenAI request fails."""
 
 
 def get_api_key() -> str:
-    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not key:
-        raise AIConfigError("OPENROUTER_API_KEY is not set")
+        raise AIConfigError("OPENAI_API_KEY is not set")
     return key
 
 
 def complete(messages: list[dict[str, str]], *, model: str = DEFAULT_MODEL) -> str:
-    """Send a chat completion request to OpenRouter and return the assistant text."""
-    api_key = get_api_key()
+    """Send a chat completion request to OpenAI and return the assistant text."""
     payload = {"model": model, "messages": messages}
+    data = _post_completion(payload)
+    return _extract_message_content(data)
 
+
+def _post_completion(payload: dict) -> dict:
+    api_key = get_api_key()
     try:
         response = httpx.post(
-            OPENROUTER_URL,
+            OPENAI_URL,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -37,18 +43,56 @@ def complete(messages: list[dict[str, str]], *, model: str = DEFAULT_MODEL) -> s
             timeout=60.0,
         )
         response.raise_for_status()
-        data = response.json()
+        return response.json()
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text.strip()
+        raise AIRequestError(
+            f"OpenAI request failed ({exc.response.status_code}): {detail}"
+        ) from exc
     except httpx.HTTPError as exc:
-        raise AIRequestError(f"OpenRouter request failed: {exc}") from exc
+        raise AIRequestError(f"OpenAI request failed: {exc}") from exc
     except ValueError as exc:
-        raise AIRequestError("OpenRouter returned invalid JSON") from exc
+        raise AIRequestError("OpenAI returned invalid JSON") from exc
 
+
+def _extract_message_content(data: dict) -> str:
     try:
         content = data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise AIRequestError("OpenRouter response missing message content") from exc
+        raise AIRequestError("OpenAI response missing message content") from exc
 
     if not isinstance(content, str) or not content.strip():
-        raise AIRequestError("OpenRouter returned an empty message")
+        raise AIRequestError("OpenAI returned an empty message")
 
     return content.strip()
+
+
+def complete_structured(
+    messages: list[dict[str, str]],
+    schema: dict,
+    *,
+    model: str = DEFAULT_MODEL,
+    schema_name: str = "response",
+) -> dict:
+    """Send a structured-output chat completion and return parsed JSON."""
+    payload = {
+        "model": model,
+        "messages": messages,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema_name,
+                "strict": True,
+                "schema": schema,
+            },
+        },
+    }
+    data = _post_completion(payload)
+    content = _extract_message_content(data)
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise AIRequestError("OpenAI returned invalid structured JSON") from exc
+    if not isinstance(parsed, dict):
+        raise AIRequestError("OpenAI structured output must be a JSON object")
+    return parsed

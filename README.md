@@ -1,6 +1,6 @@
 # AI Kanban Board
 
-A single-board Kanban project-management app with an AI chat assistant. NextJS frontend (static export) served by a Python FastAPI backend, SQLite storage, and AI via OpenRouter. Runs locally in one Docker container.
+A single-board Kanban project-management app with an AI chat assistant. NextJS frontend (static export) served by a Python FastAPI backend, SQLite storage, and AI via OpenAI. Runs locally in one Docker container.
 
 ## Run
 
@@ -26,16 +26,16 @@ cd frontend && npm run dev
 ## Test
 
 ```bash
-cd backend && uv run pytest        # backend
-cd frontend && npm run test        # unit/component
-cd frontend && npm run test:e2e    # end-to-end
+cd backend && uv run pytest        # 45 tests (1 live AI test skipped without key)
+cd frontend && npm run test        # 39 unit/component tests
+cd frontend && npm run test:e2e    # 15 end-to-end tests
 ```
 
 ## Configuration
 
 Set in a `.env` file at the project root (not committed):
 
-- `OPENROUTER_API_KEY` - OpenRouter key for AI calls
+- `OPENAI_API_KEY` - OpenAI API key for AI chat (copy from `.env.example`)
 - `SESSION_SECRET` - session cookie signing key
 
 See `docs/PLAN.md` for the build plan and `docs/DATABASE.md` for the schema.

@@ -8,7 +8,7 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 @router.post("/connectivity")
 def connectivity_test(_username: str = Depends(require_user)) -> dict[str, str]:
-    """Ask the configured model a simple arithmetic question to verify OpenRouter."""
+    """Ask the configured model a simple arithmetic question to verify OpenAI."""
     try:
         answer = complete(
             [

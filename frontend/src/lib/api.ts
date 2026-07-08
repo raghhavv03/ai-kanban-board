@@ -92,3 +92,36 @@ export function moveCardApi(
     destinationIndex,
   });
 }
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatResponse {
+  reply: string;
+  board_changed: boolean;
+}
+
+export async function chatApi(
+  message: string,
+  history: ChatMessage[]
+): Promise<ChatResponse> {
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, history }),
+  });
+  if (!res.ok) {
+    let detail = `Request failed (${res.status})`;
+    try {
+      const body = await res.json();
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      // ignore non-JSON error bodies
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}

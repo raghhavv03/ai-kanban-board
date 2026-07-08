@@ -1,6 +1,6 @@
 # Project Management MVP - Build Plan
 
-A single-board Kanban PM app: NextJS frontend (static export) served by a Python FastAPI backend, SQLite storage, and an AI chat sidebar (OpenRouter, `openai/gpt-oss-120b`) that can create/edit/move cards. Everything runs locally in one Docker container.
+A single-board Kanban PM app: NextJS frontend (static export) served by a Python FastAPI backend, SQLite storage, and an AI chat sidebar (OpenAI `gpt-4o-mini`) that can create/edit/move cards. Everything runs locally in one Docker container.
 
 ## Current status
 
@@ -14,12 +14,12 @@ A single-board Kanban PM app: NextJS frontend (static export) served by a Python
 | 6 | Backend Kanban API | Complete |
 | 7 | Connect frontend to backend | Complete (incl. drag-and-drop fixes) |
 | 8 | AI connectivity | Complete |
-| 9 | AI with board context + Structured Outputs | **Next** |
-| 10 | AI chat sidebar UI | Not started |
+| 9 | AI with board context + Structured Outputs | Complete |
+| 10 | AI chat sidebar UI | Complete |
 
-**For a new chat session:** Parts 1-8 are done. Begin at **Part 9** below. Read root `AGENTS.md`, then `backend/AGENTS.md` and `frontend/AGENTS.md`, before coding.
+**For a new chat session:** Parts 1-10 are done. MVP is complete.
 
-**Test suites (all green after Part 8):** 32 backend pytest (1 live AI test skipped without key), 32 frontend Vitest, 14 Playwright e2e.
+**Test suites (all green, MVP complete):** 45 backend pytest (1 live AI test skipped without key), 39 frontend Vitest, 15 Playwright e2e.
 
 ## How to use this document
 
@@ -35,7 +35,7 @@ These defaults were chosen to keep the MVP simple; flag if any should change.
 4. Columns are fixed (Backlog, To Do, In Progress, Review, Done) and only renameable. No add/remove column.
 5. SQLite schema supports multiple users but the MVP seeds/uses exactly one board per user.
 6. Single Docker image: multi-stage build (NextJS static build stage + Python runtime stage). `uv` manages Python deps. Container exposes one port (8000).
-7. AI uses OpenRouter model `openai/gpt-oss-120b` with Structured Outputs. If that model does not reliably support structured outputs on OpenRouter, we fall back to another OpenRouter model that does (to be confirmed at Part 8/9).
+7. AI uses OpenAI model `gpt-4o-mini` with Structured Outputs; falls back to `gpt-4o` on request failure.
 
 ---
 
@@ -195,42 +195,46 @@ Success criteria:
 
 ## Part 8: AI connectivity
 
-Prove OpenRouter connectivity from the backend.
+Prove OpenAI connectivity from the backend.
 
-- [x] Load `OPENROUTER_API_KEY` from `.env` (never commit real key; already gitignored)
-- [x] Backend AI client calling OpenRouter with model `openai/gpt-oss-120b`
+- [x] Load `OPENAI_API_KEY` from `.env` (never commit real key; already gitignored)
+- [x] Backend AI client calling OpenAI with model `gpt-4o-mini`
 - [x] Temporary/verified test path that asks "what is 2+2" and confirms a sane response
 - [x] Handle missing key / network error gracefully
 
 Implementation:
-- `backend/app/ai_client.py` - `complete()` sends chat completions to OpenRouter via `httpx`; raises `AIConfigError` (missing key) or `AIRequestError` (HTTP/parse failures)
-- `backend/app/ai.py` - auth-protected `POST /api/ai/connectivity` asks "What is 2+2?" and returns `{ model, answer }`; 503 if key missing, 502 if OpenRouter fails
-- `backend/tests/test_ai.py` - unit tests with mocked OpenRouter; live test skipped when `OPENROUTER_API_KEY` unset
+- `backend/app/ai_client.py` - `complete()` sends chat completions to OpenAI via `httpx`; raises `AIConfigError` (missing key) or `AIRequestError` (HTTP/parse failures)
+- `backend/app/ai.py` - auth-protected `POST /api/ai/connectivity` asks "What is 2+2?" and returns `{ model, answer }`; 503 if key missing, 502 if OpenAI fails
+- `backend/tests/test_ai.py` - unit tests with mocked OpenAI; live test skipped when `OPENAI_API_KEY` unset
 
 Tests / verification:
 - A connectivity test (guarded so CI without a key skips) that sends "2+2" and asserts the response contains "4"
 - Manual: run inside container and confirm the AI call succeeds
 
 Success criteria:
-- Backend can reach OpenRouter and get a valid completion from the configured model
+- Backend can reach OpenAI and get a valid completion from the configured model
 
 ---
 
 ## Part 9: AI with board context + Structured Outputs
 
-**This is the next part to implement.**
-
 Send the board JSON + user question + history; get a structured response with an optional board update.
 
-- [ ] Define the Structured Output schema: `{ reply: string, board_update?: <list of card operations or full board> }`
-- [ ] `POST /api/chat` accepts the user message + conversation history; backend attaches current board JSON and system prompt
-- [ ] Parse/validate structured output; if a board update is present, apply it via the Part 6 data layer (create/edit/move cards)
-- [ ] Return the assistant reply and a flag indicating whether the board changed
-- [ ] Confirm chosen model supports structured outputs on OpenRouter; fall back per assumption 7 if not
+- [x] Define the Structured Output schema: `{ reply: string, operations?: [...] }`
+- [x] `POST /api/chat` accepts the user message + conversation history; backend attaches current board JSON and system prompt
+- [x] Parse/validate structured output; if operations are present, apply them via `board_service.apply_operations`
+- [x] Return the assistant reply and a flag indicating whether the board changed
+- [x] Use `gpt-4o-mini` for structured outputs; fall back to `gpt-4o` on failure
+
+Implementation:
+- `backend/app/chat_schema.py` - system prompt and flat JSON schema (OpenAI strict mode; no `oneOf`)
+- `backend/app/ai_client.py` - `complete_structured()` with OpenAI `json_schema` response format
+- `backend/app/chat.py` - auth-protected `POST /api/chat`; limits history to 10 messages
+- `backend/app/board_service.py` - `apply_operations()` validates then applies create/edit/delete/move/rename operations
 
 Tests / verification:
-- Backend tests with a mocked OpenRouter response: reply-only path; board-update path applies changes and persists; malformed output handled without corrupting the board
-- Live smoke test: ask "add a card X to To Do" and confirm the card is created
+- Backend tests with mocked OpenAI: reply-only path; board-update path applies changes and persists; malformed output handled without corrupting the board
+- Live smoke test: ask "add a card X to To Do" and confirm the card is created (optional, requires key)
 
 Success criteria:
 - The AI reliably returns structured output; board updates from the AI are applied and persisted correctly; invalid output never corrupts the board
@@ -241,14 +245,19 @@ Success criteria:
 
 Add a polished chat sidebar; auto-refresh the board when the AI changes it.
 
-- [ ] Sidebar chat widget (brand-styled) with message list, input, send, and loading state
-- [ ] Maintain conversation history client-side and send it with each request
-- [ ] On a response indicating a board change, re-fetch/refresh the board so the UI updates automatically
-- [ ] Responsive layout: board + collapsible sidebar
+- [x] Sidebar chat widget (brand-styled) with message list, input, send, and loading state
+- [x] Maintain conversation history client-side and send it with each request
+- [x] On a response indicating a board change, re-fetch/refresh the board so the UI updates automatically
+- [x] Responsive layout: full-width board + floating circular AI widget (bottom-right)
+
+Implementation:
+- `frontend/src/hooks/useChat.ts` - chat state, sends history (max 10) to `/api/chat`, triggers `board.refresh` on updates
+- `frontend/src/components/ChatSidebar.tsx` - floating circular AI widget that expands into a chat panel
+- `frontend/src/app/page.tsx` - full-width board + floating chat widget
 
 Tests / verification:
-- Frontend Vitest: chat component renders messages, sends input, shows loading, triggers board refresh on update flag (mocked API)
-- Playwright e2e against the container: send a message that adds/moves a card and assert the board updates without manual reload
+- Frontend Vitest: chat hook and sidebar component (mocked API)
+- Playwright e2e: send a mocked chat message with `board_changed: true` and assert the board refreshes
 - Full regression: all backend + frontend + e2e suites pass
 
 Success criteria:

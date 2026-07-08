@@ -21,7 +21,7 @@ export default defineConfig({
     // Build the static export, then serve it via the FastAPI backend so the
     // auth API (/api/*) is available to e2e tests.
     command:
-      'npm run build && STATIC_DIR="$PWD/out" ALLOW_TEST_RESET=1 uv run --directory ../backend uvicorn app.main:app --port 3001',
+      'npm run build && STATIC_DIR="$PWD/out" ALLOW_TEST_RESET=1 PATH="$HOME/.local/bin:$PATH" uv run --directory ../backend uvicorn app.main:app --port 3001',
     url: "http://localhost:3001/api/health",
     reuseExistingServer: false,
     timeout: 120000,
