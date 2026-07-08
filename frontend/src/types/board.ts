@@ -16,6 +16,7 @@ export interface BoardState {
 }
 
 export type BoardAction =
+  | { type: "SET_BOARD"; board: BoardState }
   | { type: "RENAME_COLUMN"; columnId: string; title: string }
   | {
       type: "ADD_CARD";

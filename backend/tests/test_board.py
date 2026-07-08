@@ -194,6 +194,26 @@ def test_move_card_missing_404(client):
     assert res.status_code == 404
 
 
+# --- test reset endpoint (guarded) ---
+
+
+def test_reset_disabled_by_default(client, monkeypatch):
+    monkeypatch.delenv("ALLOW_TEST_RESET", raising=False)
+    assert client.post("/api/test/reset").status_code == 404
+
+
+def test_reset_reseeds_when_enabled(client, monkeypatch):
+    monkeypatch.setenv("ALLOW_TEST_RESET", "1")
+    board = _board(client)
+    card_id = board["columns"][0]["cardIds"][0]
+    client.delete(f"/api/cards/{card_id}")
+    assert len(_board(client)["cards"]) == 8
+
+    res = client.post("/api/test/reset")
+    assert res.status_code == 200
+    assert len(res.json()["cards"]) == 9
+
+
 # --- persistence across requests ---
 
 

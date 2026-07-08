@@ -6,7 +6,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import type { Column as ColumnType, Card as CardType } from "@/types/board";
-import { columnEndId } from "@/lib/dropIndex";
+import { columnDroppableId, columnEndId } from "@/lib/dropIndex";
 import { EditableColumnTitle } from "./EditableColumnTitle";
 import { Card } from "./Card";
 import { AddCardForm } from "./AddCardForm";
@@ -30,7 +30,7 @@ export function Column({
   onEditCard,
   isOver,
 }: ColumnProps) {
-  const { setNodeRef } = useDroppable({ id: column.id });
+  const { setNodeRef } = useDroppable({ id: columnDroppableId(column.id) });
   const { setNodeRef: setEndRef, isOver: isEndOver } = useDroppable({
     id: columnEndId(column.id),
   });

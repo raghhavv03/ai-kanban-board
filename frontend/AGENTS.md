@@ -15,16 +15,17 @@ NextJS (App Router) + React + TypeScript + Tailwind CSS v4 Kanban board. Built a
 
 - `src/app/layout.tsx` - root layout, loads fonts, sets metadata, base body styles
 - `src/app/page.tsx` - home page. Uses `useAuth`: shows a loading spinner, then `LoginForm` if unauthenticated, otherwise the header (with logout button) + `Board`. `Board` is loaded with `next/dynamic` and `ssr: false` (drag/drop is client-only) with a skeleton loading state
-- `src/lib/api.ts` - fetch client for the backend auth API (`getMe`, `login`, `logout`), sends cookies with `credentials: "include"`
+- `src/lib/api.ts` - fetch client for the backend API (auth: `getMe`/`login`/`logout`; board: `fetchBoard` + column/card mutation calls), sends cookies with `credentials: "include"`
 - `src/hooks/useAuth.ts` - auth state hook (`loading`/`authed`/`anon`), checks `/api/me` on load, exposes `login`/`logout`
+- `src/hooks/useBoard.ts` - board state hook. Takes an `enabled` flag (loads once authenticated), holds status (`loading`/`ready`/`error`), and exposes optimistic actions (rename/add/edit/delete) that reconcile with the server board, plus `moveCardLocal` (live drag) and `persistMove` (persist on drop)
 - `src/components/LoginForm.tsx` - sign-in form (username/password) with error state
 - `src/app/globals.css` - Tailwind import, brand color CSS variables, `@theme` mapping, reduced-motion handling
 - `src/types/board.ts` - core types: `Card`, `Column`, `BoardState`, `BoardAction`
 - `src/data/dummyData.ts` - `initialBoardState`: 5 seeded columns (Backlog, To Do, In Progress, Review, Done) and 9 cards
 - `src/lib/boardReducer.ts` - pure reducer handling `RENAME_COLUMN`, `ADD_CARD`, `EDIT_CARD`, `DELETE_CARD`, `MOVE_CARD`; generates card ids locally
-- `src/lib/dropIndex.ts` - drag/drop helpers: `columnEndId`, `isColumnEndId`, `resolveOverColumn`, `computeDropIndex` (pointer-position aware drop index)
+- `src/lib/dropIndex.ts` - drag/drop helpers: `columnDroppableId`/`columnEndId` (namespace column droppable ids as `col-<id>` so they never collide with numeric card ids), `resolveOverColumn`, `computeDropIndex`
 - `src/hooks/useBoard.ts` - `useReducer` wrapper exposing `{ state, dispatch }`
-- `src/components/Board.tsx` - `DndContext`, sensors, drag handlers, renders columns + `DragOverlay`
+- `src/components/Board.tsx` - `DndContext`, sensors, drag handlers, renders columns + `DragOverlay`. Custom collision detection (`pointerWithin` -> nearest card in the hovered column) plus `MeasuringStrategy.Always` so droppable rects stay accurate as cards shift columns mid-drag. Uses callback props: live drag reordering via `onMoveLocal`, persistence via `onPersistMove` on drop, and `onRenameColumn`/`onAddCard`/`onEditCard`/`onDeleteCard`
 - `src/components/Column.tsx` - a column with droppable body and an end-drop zone; renders `EditableColumnTitle`, cards, `AddCardForm`
 - `src/components/Card.tsx` - sortable card with title, details, hover-to-reveal edit and delete buttons; inline edit form (drag disabled while editing)
 - `src/components/AddCardForm.tsx` - inline add-card form (title + optional details)
@@ -41,11 +42,11 @@ BoardState = {
 }
 ```
 
-All mutations go through `boardReducer`. Cards can be added, edited, deleted, and moved. There is no add/remove column (columns are fixed, only renameable).
+The board is loaded from the backend (`GET /api/board`) after login and held via `useBoard`. Local edits are applied optimistically through `boardReducer`, then reconciled with the authoritative board returned by each mutation endpoint. Cards can be added, edited, deleted, and moved. There is no add/remove column (columns are fixed, only renameable).
 
 ## Data flow
 
-`page.tsx` -> `useBoard()` -> `<Board state dispatch>` -> columns/cards. UI events dispatch `BoardAction`s; the reducer returns new immutable state. Drag events are resolved into a `MOVE_CARD` action using `dropIndex.ts` helpers.
+`page.tsx` -> `useBoard(enabled)` -> `<Board ...callbacks>` -> columns/cards. Board load happens after auth; UI events call the hook's action functions, which optimistically update local state and call the backend, then replace state with the server's board. Drag events are resolved into moves using `dropIndex.ts` helpers (local live reorder, persisted once on drop).
 
 ## Styling / brand
 

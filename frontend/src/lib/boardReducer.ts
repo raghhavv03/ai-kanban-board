@@ -11,6 +11,10 @@ export function boardReducer(
   action: BoardAction
 ): BoardState {
   switch (action.type) {
+    case "SET_BOARD": {
+      return action.board;
+    }
+
     case "RENAME_COLUMN": {
       return {
         ...state,

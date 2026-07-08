@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 
 async function login(page: Page) {
   await page.goto("/");
@@ -6,6 +6,46 @@ async function login(page: Page) {
   await page.getByLabel("Password").fill("password");
   await page.getByTestId("login-submit").click();
   await page.waitForSelector('[data-testid="kanban-board"]');
+}
+
+async function waitForBoard(page: Page) {
+  await page.waitForSelector('[data-testid="kanban-board"]');
+}
+
+function columnByTitle(page: Page, title: string): Locator {
+  return page.locator('[data-testid^="column-"]').filter({
+    has: page.getByRole("button", { name: `Rename column: ${title}` }),
+  });
+}
+
+function cardByText(page: Page, text: string): Locator {
+  return page
+    .locator('[data-testid^="card-"]')
+    .filter({ hasText: text })
+    .first();
+}
+
+async function columnCardTitles(column: Locator): Promise<string[]> {
+  return column.locator('[data-testid^="card-"] h3').allInnerTexts();
+}
+
+async function dragCardTo(
+  page: Page,
+  card: Locator,
+  targetX: number,
+  targetY: number
+) {
+  const box = await card.boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  // small initial move to pass the drag activation distance
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2 + 15, {
+    steps: 5,
+  });
+  await page.mouse.move(targetX, targetY, { steps: 20 });
+  await page.mouse.move(targetX, targetY, { steps: 5 });
+  await page.mouse.up();
 }
 
 test.describe("Authentication", () => {
@@ -36,7 +76,7 @@ test.describe("Authentication", () => {
   test("session persists across reload", async ({ page }) => {
     await login(page);
     await page.reload();
-    await page.waitForSelector('[data-testid="kanban-board"]');
+    await waitForBoard(page);
     await expect(page.getByTestId("login-form")).toHaveCount(0);
   });
 });
@@ -44,72 +84,90 @@ test.describe("Authentication", () => {
 test.describe("Kanban Board", () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
+    await page.request.post("/api/test/reset");
+    await page.reload();
+    await waitForBoard(page);
   });
 
-  test("loads with dummy data in expected columns", async ({ page }) => {
-    await expect(page.getByText("Project Board")).toBeVisible();
-    await expect(page.getByText("Backlog")).toBeVisible();
-    await expect(page.getByText("To Do")).toBeVisible();
-    await expect(page.getByText("In Progress")).toBeVisible();
-    await expect(page.getByText("Review")).toBeVisible();
-    await expect(page.getByText("Done")).toBeVisible();
+  test("loads with seeded data in expected columns", async ({ page }) => {
+    for (const title of ["Backlog", "To Do", "In Progress", "Review", "Done"]) {
+      await expect(
+        page.getByRole("button", { name: `Rename column: ${title}` })
+      ).toBeVisible();
+    }
     await expect(page.getByText("Research competitors")).toBeVisible();
     await expect(page.getByText("Deploy MVP")).toBeVisible();
   });
 
-  test("renames a column", async ({ page }) => {
+  test("renames a column and persists", async ({ page }) => {
     await page.getByRole("button", { name: "Rename column: To Do" }).click();
     const input = page.getByLabel("Column title");
     await input.fill("Ready");
     await input.press("Enter");
+    await expect(
+      page.getByRole("button", { name: "Rename column: Ready" })
+    ).toBeVisible();
 
-    await expect(page.getByText("Ready")).toBeVisible();
-    await expect(page.getByText("To Do")).not.toBeVisible();
+    await page.reload();
+    await waitForBoard(page);
+    await expect(
+      page.getByRole("button", { name: "Rename column: Ready" })
+    ).toBeVisible();
   });
 
-  test("adds a card with title and details", async ({ page }) => {
-    const column = page.getByTestId("column-col-todo");
-    await column.getByTestId("add-card-button").click();
-    await column.getByLabel("Card title").fill("E2E Test Card");
-    await column.getByLabel("Card details").fill("Created by Playwright");
-    await column.getByTestId("add-card-submit").click();
+  test("adds a card and persists", async ({ page }) => {
+    const todo = columnByTitle(page, "To Do");
+    await todo.getByTestId("add-card-button").click();
+    await todo.getByLabel("Card title").fill("E2E Test Card");
+    await todo.getByLabel("Card details").fill("Created by Playwright");
+    await todo.getByTestId("add-card-submit").click();
 
+    await expect(page.getByText("E2E Test Card")).toBeVisible();
+
+    await page.reload();
+    await waitForBoard(page);
     await expect(page.getByText("E2E Test Card")).toBeVisible();
     await expect(page.getByText("Created by Playwright")).toBeVisible();
   });
 
-  test("edits a card's title and details", async ({ page }) => {
-    const card = page.getByTestId("card-card-3");
+  test("edits a card and persists", async ({ page }) => {
+    const card = cardByText(page, "Design board layout");
     await card.hover();
-    await card.getByRole("button", { name: "Edit card: Design board layout" }).click();
+    await card
+      .getByRole("button", { name: "Edit card: Design board layout" })
+      .click();
 
-    const titleInput = page.getByLabel("Edit card title");
-    await titleInput.fill("Design board UI");
-    const detailsInput = page.getByLabel("Edit card details");
-    await detailsInput.fill("Updated wireframe notes");
-    await page.getByTestId("card-edit-save-card-3").click();
+    await page.getByLabel("Edit card title").fill("Design board UI");
+    await page.getByLabel("Edit card details").fill("Updated wireframe notes");
+    await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page.getByText("Design board UI")).toBeVisible();
-    await expect(page.getByText("Updated wireframe notes")).toBeVisible();
-    await expect(page.getByText("Design board layout")).not.toBeVisible();
+
+    await page.reload();
+    await waitForBoard(page);
+    await expect(page.getByText("Design board UI")).toBeVisible();
+    await expect(page.getByText("Design board layout")).toHaveCount(0);
   });
 
-  test("deletes a card", async ({ page }) => {
-    const card = page.getByTestId("card-card-3");
-    await expect(card).toBeVisible();
+  test("deletes a card and persists", async ({ page }) => {
+    const card = cardByText(page, "Set up project repo");
     await card.hover();
-    await card.getByRole("button", { name: "Delete card: Design board layout" }).click();
+    await card
+      .getByRole("button", { name: "Delete card: Set up project repo" })
+      .click();
 
-    await expect(page.getByText("Design board layout")).not.toBeVisible();
+    await expect(page.getByText("Set up project repo")).toHaveCount(0);
+
+    await page.reload();
+    await waitForBoard(page);
+    await expect(page.getByText("Set up project repo")).toHaveCount(0);
   });
 
-  test("drags a card from one column to another", async ({ page }) => {
-    const sourceCard = page.getByTestId("card-card-3");
-    const destColumn = page.getByTestId("column-col-in-progress");
+  test("drags a card to another column and persists", async ({ page }) => {
+    const source = cardByText(page, "Design board layout");
+    const destColumn = columnByTitle(page, "In Progress");
 
-    await expect(sourceCard).toBeVisible();
-
-    const sourceBox = await sourceCard.boundingBox();
+    const sourceBox = await source.boundingBox();
     const destBox = await destColumn.boundingBox();
     expect(sourceBox).toBeTruthy();
     expect(destBox).toBeTruthy();
@@ -128,36 +186,150 @@ test.describe("Kanban Board", () => {
     await expect(
       destColumn.getByText("Design board layout")
     ).toBeVisible();
+
+    await page.reload();
+    await waitForBoard(page);
     await expect(
-      page.getByTestId("column-col-todo").getByText("Design board layout")
-    ).not.toBeVisible();
+      columnByTitle(page, "In Progress").getByText("Design board layout")
+    ).toBeVisible();
+    await expect(
+      columnByTitle(page, "To Do").getByText("Design board layout")
+    ).toHaveCount(0);
   });
 
-  test("drags a card to the last position in another column", async ({ page }) => {
-    const sourceCard = page.getByTestId("card-card-3");
-    const destColumn = page.getByTestId("column-col-in-progress");
+  test("drops a card at the first position of another column", async ({
+    page,
+  }) => {
+    const source = cardByText(page, "Design board layout");
+    const destColumn = columnByTitle(page, "In Progress");
+    const firstCard = destColumn.locator('[data-testid^="card-"]').first();
 
-    const sourceBox = await sourceCard.boundingBox();
-    const lastDestCard = destColumn.getByTestId("card-card-6");
-    const lastCardBox = await lastDestCard.boundingBox();
-    const destBox = await destColumn.boundingBox();
-    expect(sourceBox).toBeTruthy();
-    expect(lastCardBox).toBeTruthy();
-    expect(destBox).toBeTruthy();
+    const firstBox = await firstCard.boundingBox();
+    expect(firstBox).toBeTruthy();
+    // Aim just below the top edge of the first card so it lands above it.
+    await dragCardTo(
+      page,
+      source,
+      firstBox!.x + firstBox!.width / 2,
+      firstBox!.y + 6
+    );
 
-    const startX = sourceBox!.x + sourceBox!.width / 2;
-    const startY = sourceBox!.y + sourceBox!.height / 2;
-    const endX = destBox!.x + destBox!.width / 2;
-    const endY = lastCardBox!.y + lastCardBox!.height + 30;
+    await expect
+      .poll(async () => (await columnCardTitles(destColumn))[0])
+      .toBe("Design board layout");
 
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
-    await page.mouse.move(startX, startY + 20, { steps: 5 });
-    await page.mouse.move(endX, endY, { steps: 20 });
-    await page.mouse.up();
+    await page.reload();
+    await waitForBoard(page);
+    const titles = await columnCardTitles(columnByTitle(page, "In Progress"));
+    expect(titles[0]).toBe("Design board layout");
+  });
 
-    const destCards = destColumn.locator("[data-testid^='card-']");
-    await expect(destCards).toHaveCount(3);
-    await expect(destCards.nth(2)).toContainText("Design board layout");
+  test("drops a tall card above a shorter card", async ({ page }) => {
+    // A card taller than its target used to always land below it. Create a
+    // deliberately tall card, then drop it above the first card in another
+    // column.
+    const todo = columnByTitle(page, "To Do");
+    await todo.getByTestId("add-card-button").click();
+    await todo.getByLabel("Card title").fill("Tall card");
+    await todo
+      .getByLabel("Card details")
+      .fill(
+        "This card has a very long description that spans multiple lines so " +
+          "that it is noticeably taller than the cards it is dropped onto, " +
+          "which is exactly the condition that broke the above/below drop."
+      );
+    await todo.getByTestId("add-card-submit").click();
+    await expect(page.getByText("Tall card")).toBeVisible();
+
+    const source = cardByText(page, "Tall card");
+    const destColumn = columnByTitle(page, "Backlog");
+    const firstCard = destColumn.locator('[data-testid^="card-"]').first();
+    const firstBox = await firstCard.boundingBox();
+    expect(firstBox).toBeTruthy();
+
+    await dragCardTo(
+      page,
+      source,
+      firstBox!.x + firstBox!.width / 2,
+      firstBox!.y + 6
+    );
+
+    await expect
+      .poll(async () => (await columnCardTitles(destColumn))[0])
+      .toBe("Tall card");
+
+    await page.reload();
+    await waitForBoard(page);
+    const titles = await columnCardTitles(columnByTitle(page, "Backlog"));
+    expect(titles[0]).toBe("Tall card");
+  });
+
+  test("reorders a card above another card in the same column", async ({
+    page,
+  }) => {
+    const column = columnByTitle(page, "In Progress");
+    const source = column
+      .locator('[data-testid^="card-"]')
+      .filter({ hasText: "Implement drag and drop" })
+      .first();
+    const anchor = column
+      .locator('[data-testid^="card-"]')
+      .filter({ hasText: "Build card component" })
+      .first();
+
+    const anchorBox = await anchor.boundingBox();
+    expect(anchorBox).toBeTruthy();
+    await dragCardTo(
+      page,
+      source,
+      anchorBox!.x + anchorBox!.width / 2,
+      anchorBox!.y + 6
+    );
+
+    await expect
+      .poll(async () => await columnCardTitles(column))
+      .toEqual(["Implement drag and drop", "Build card component"]);
+
+    await page.reload();
+    await waitForBoard(page);
+    expect(await columnCardTitles(columnByTitle(page, "In Progress"))).toEqual([
+      "Implement drag and drop",
+      "Build card component",
+    ]);
+  });
+
+  test("drops a card directly above an existing card", async ({ page }) => {
+    const source = cardByText(page, "Set up project repo");
+    const destColumn = columnByTitle(page, "In Progress");
+    const anchor = destColumn
+      .locator('[data-testid^="card-"]')
+      .filter({ hasText: "Implement drag and drop" })
+      .first();
+
+    const anchorBox = await anchor.boundingBox();
+    expect(anchorBox).toBeTruthy();
+    // Aim at the upper portion of the anchor card to insert before it.
+    await dragCardTo(
+      page,
+      source,
+      anchorBox!.x + anchorBox!.width / 2,
+      anchorBox!.y + 6
+    );
+
+    await expect
+      .poll(async () => await columnCardTitles(destColumn))
+      .toEqual([
+        "Build card component",
+        "Set up project repo",
+        "Implement drag and drop",
+      ]);
+
+    await page.reload();
+    await waitForBoard(page);
+    expect(await columnCardTitles(columnByTitle(page, "In Progress"))).toEqual([
+      "Build card component",
+      "Set up project repo",
+      "Implement drag and drop",
+    ]);
   });
 });

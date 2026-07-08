@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
@@ -128,4 +130,15 @@ def move_card(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Card or column not found")
+    return board_service.serialize_board(board)
+
+
+@router.post("/test/reset")
+def reset_board(
+    username: str = Depends(require_user), db: Session = Depends(get_db)
+):
+    """Reset the board to its seeded state. Only enabled for e2e tests."""
+    if os.environ.get("ALLOW_TEST_RESET") != "1":
+        raise HTTPException(status_code=404, detail="Not found")
+    board = board_service.reset_user_board(db, username)
     return board_service.serialize_board(board)

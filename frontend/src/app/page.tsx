@@ -26,10 +26,10 @@ const Board = dynamic(
 );
 
 export default function Home() {
-  const { status, login, logout } = useAuth();
-  const { state, dispatch } = useBoard();
+  const { status: authStatus, login, logout } = useAuth();
+  const board = useBoard(authStatus === "authed");
 
-  if (status === "loading") {
+  if (authStatus === "loading") {
     return (
       <main
         className="min-h-screen flex items-center justify-center"
@@ -40,7 +40,7 @@ export default function Home() {
     );
   }
 
-  if (status === "anon") {
+  if (authStatus === "anon") {
     return <LoginForm onLogin={login} />;
   }
 
@@ -65,7 +65,42 @@ export default function Home() {
       </header>
 
       <div className="flex-1 p-6 overflow-hidden">
-        <Board state={state} dispatch={dispatch} />
+        {board.status === "error" ? (
+          <div
+            data-testid="board-error"
+            className="flex flex-col items-center justify-center gap-3 py-20 text-center"
+          >
+            <p className="text-sm text-gray-text">Could not load the board.</p>
+            <button
+              onClick={board.reload}
+              className="text-sm font-medium text-white bg-purple-secondary hover:bg-purple-secondary/90 rounded-md px-4 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-secondary"
+            >
+              Retry
+            </button>
+          </div>
+        ) : board.status === "loading" ? (
+          <div
+            className="flex gap-4 overflow-x-auto pb-4 px-1"
+            data-testid="board-loading"
+          >
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="min-w-[280px] w-[280px] h-64 rounded-xl bg-white border border-card-border animate-pulse"
+              />
+            ))}
+          </div>
+        ) : (
+          <Board
+            state={board.state}
+            onMoveLocal={board.moveCardLocal}
+            onPersistMove={board.persistMove}
+            onRenameColumn={board.renameColumn}
+            onAddCard={board.addCard}
+            onEditCard={board.editCard}
+            onDeleteCard={board.deleteCard}
+          />
+        )}
       </div>
     </main>
   );

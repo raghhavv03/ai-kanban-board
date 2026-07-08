@@ -56,6 +56,16 @@ def get_or_create_board(db: Session, username: str) -> Board:
     return board
 
 
+def reset_user_board(db: Session, username: str) -> Board:
+    """Delete the user's board(s) and reseed. Used only by the e2e test reset."""
+    user = db.scalar(select(User).where(User.username == username))
+    if user is not None:
+        for board in list(user.boards):
+            db.delete(board)
+        db.commit()
+    return get_or_create_board(db, username)
+
+
 def _seed_board(db: Session, user: User) -> Board:
     board = Board(user_id=user.id, name="My Board")
     db.add(board)

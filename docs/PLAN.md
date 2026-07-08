@@ -143,10 +143,10 @@ Success criteria:
 
 Replace in-memory state with real API calls for a persistent board.
 
-- [ ] Add a typed API client in the frontend (`/api/board` + mutation endpoints)
-- [ ] Load board from backend on mount; render loading/error states
-- [ ] Wire rename column, add/edit/delete card, and move card to backend, updating UI optimistically with reconciliation on response
-- [ ] Remove reliance on `dummyData` for runtime state (keep only for tests/seed reference)
+- [x] Add a typed API client in the frontend (`/api/board` + mutation endpoints)
+- [x] Load board from backend after auth; render loading/error states
+- [x] Wire rename column, add/edit/delete card, and move card to backend, updating UI optimistically with reconciliation on response
+- [x] Remove reliance on `dummyData` for runtime state (keep only for tests/seed reference)
 
 Tests / verification:
 - Frontend Vitest: API client and hook logic with a mocked fetch (success + error)

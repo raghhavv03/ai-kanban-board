@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EditableColumnTitle } from "./EditableColumnTitle";
 import { AddCardForm } from "./AddCardForm";
@@ -65,9 +65,24 @@ describe("LoginForm", () => {
   });
 });
 
+function renderBoard(overrides = {}) {
+  const props = {
+    state: initialBoardState,
+    onMoveLocal: vi.fn(),
+    onPersistMove: vi.fn(),
+    onRenameColumn: vi.fn(),
+    onAddCard: vi.fn(),
+    onEditCard: vi.fn(),
+    onDeleteCard: vi.fn(),
+    ...overrides,
+  };
+  render(<Board {...props} />);
+  return props;
+}
+
 describe("Board", () => {
   it("renders all columns with dummy data", () => {
-    render(<Board state={initialBoardState} dispatch={vi.fn()} />);
+    renderBoard();
 
     expect(screen.getByTestId("kanban-board")).toBeInTheDocument();
     expect(screen.getByText("Backlog")).toBeInTheDocument();
@@ -78,24 +93,39 @@ describe("Board", () => {
     expect(screen.getByText("Research competitors")).toBeInTheDocument();
   });
 
-  it("edits a card and dispatches EDIT_CARD", async () => {
-    const dispatch = vi.fn();
+  it("edits a card and calls onEditCard", async () => {
+    const onEditCard = vi.fn();
     const user = userEvent.setup();
-    render(<Board state={initialBoardState} dispatch={dispatch} />);
+    renderBoard({ onEditCard });
 
-    await user.click(
-      screen.getByLabelText("Edit card: Research competitors")
-    );
+    await user.click(screen.getByLabelText("Edit card: Research competitors"));
 
     const titleInput = screen.getByLabelText("Edit card title");
     await user.clear(titleInput);
     await user.type(titleInput, "Analyze competitors");
     await user.click(screen.getByTestId("card-edit-save-card-1"));
 
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "EDIT_CARD",
-      cardId: "card-1",
-      card: { title: "Analyze competitors", details: expect.any(String) },
-    });
+    expect(onEditCard).toHaveBeenCalledWith(
+      "card-1",
+      "Analyze competitors",
+      expect.any(String)
+    );
+  });
+
+  it("adds a card and calls onAddCard", async () => {
+    const onAddCard = vi.fn();
+    const user = userEvent.setup();
+    renderBoard({ onAddCard });
+
+    const backlog = screen.getByTestId("column-col-backlog");
+    await user.click(within(backlog).getByTestId("add-card-button"));
+    await user.type(within(backlog).getByLabelText("Card title"), "Fresh task");
+    await user.click(within(backlog).getByTestId("add-card-submit"));
+
+    expect(onAddCard).toHaveBeenCalledWith(
+      "col-backlog",
+      "Fresh task",
+      expect.any(String)
+    );
   });
 });
