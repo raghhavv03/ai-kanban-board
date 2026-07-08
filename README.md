@@ -1,6 +1,22 @@
 # AI Kanban Board
 
-A single-board Kanban project-management app with an AI chat assistant. NextJS frontend (static export) served by a Python FastAPI backend, SQLite storage, and AI via OpenAI. Runs locally in one Docker container.
+A single-board Kanban project-management app with an AI chat assistant. Next.js frontend (static export) served by a Python FastAPI backend, SQLite storage, and AI via OpenAI. Runs locally in one Docker container.
+
+## Features
+
+- Sign-in protected Kanban board (single board per user)
+- Fixed, renameable columns
+- Drag-and-drop cards, with editing
+- AI chat sidebar that can create, edit, and move cards via natural language
+- Persistent storage with SQLite
+
+## Tech Stack
+
+- **Frontend:** Next.js (static export), TypeScript
+- **Backend:** Python, FastAPI, served at `/`
+- **Database:** SQLite
+- **AI:** OpenAI (`gpt-4o-mini`, falls back to `gpt-4o`)
+- **Packaging:** Docker, `uv` for Python dependency management
 
 ## Run
 
