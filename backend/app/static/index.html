@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kanban PM App</title>
+    <style>
+      :root {
+        --accent-yellow: #ecad0a;
+        --blue-primary: #209dd7;
+        --purple-secondary: #753991;
+        --dark-navy: #032147;
+        --gray-text: #888888;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, sans-serif;
+        background: #f5f7fa;
+        color: var(--dark-navy);
+      }
+      .card {
+        background: #fff;
+        border-top: 4px solid var(--accent-yellow);
+        border-radius: 12px;
+        padding: 2rem 2.5rem;
+        box-shadow: 0 6px 24px rgba(3, 33, 71, 0.08);
+        text-align: center;
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+      }
+      p {
+        color: var(--gray-text);
+        margin: 0.25rem 0;
+      }
+      #api-status {
+        margin-top: 1rem;
+        font-weight: 600;
+        color: var(--purple-secondary);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Kanban PM App</h1>
+      <p>Backend scaffolding is running.</p>
+      <p id="api-status">Checking API...</p>
+    </div>
+    <script>
+      fetch("/api/health")
+        .then((res) => res.json())
+        .then((data) => {
+          document.getElementById("api-status").textContent =
+            "API health: " + data.status;
+        })
+        .catch(() => {
+          document.getElementById("api-status").textContent =
+            "API unreachable";
+        });
+    </script>
+  </body>
+</html>
