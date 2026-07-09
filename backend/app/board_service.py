@@ -262,14 +262,14 @@ def _validate_operation(board: Board, operation: dict) -> dict:
             column_id=operation.get("column_id"),
             column_title=operation.get("column_title"),
         )
-        title = str(operation.get("title", "")).strip()
+        title = str(operation.get("title") or "").strip()
         if not title:
             raise OperationError("create_card requires a non-blank title")
         return {
             "type": op_type,
             "column_id": column_id,
             "title": title,
-            "details": str(operation.get("details", "")).strip(),
+            "details": str(operation.get("details") or "").strip(),
         }
 
     if op_type == "edit_card":
@@ -278,14 +278,14 @@ def _validate_operation(board: Board, operation: dict) -> dict:
             _get_card(board, card_id)
         except NotFoundError as exc:
             raise OperationError(str(exc)) from exc
-        title = str(operation.get("title", "")).strip()
+        title = str(operation.get("title") or "").strip()
         if not title:
             raise OperationError("edit_card requires a non-blank title")
         return {
             "type": op_type,
             "card_id": card_id,
             "title": title,
-            "details": str(operation.get("details", "")).strip(),
+            "details": str(operation.get("details") or "").strip(),
         }
 
     if op_type == "delete_card":
@@ -329,7 +329,7 @@ def _validate_operation(board: Board, operation: dict) -> dict:
         column_id=operation.get("column_id"),
         column_title=operation.get("column_title"),
     )
-    title = str(operation.get("title", "")).strip()
+    title = str(operation.get("title") or "").strip()
     if not title:
         raise OperationError("rename_column requires a non-blank title")
     return {"type": op_type, "column_id": column_id, "title": title}

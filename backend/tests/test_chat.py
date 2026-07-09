@@ -77,6 +77,57 @@ def test_apply_operations_create_card_by_column_title(db_session):
     assert "Title lookup card" in titles
 
 
+def test_apply_operations_null_details_becomes_empty_string(db_session):
+    board = get_or_create_board(db_session, "user")
+    todo_column = next(c for c in board.columns if c.title == "To Do")
+
+    changed = apply_operations(
+        db_session,
+        board,
+        [
+            {
+                "type": "create_card",
+                "column_id": str(todo_column.id),
+                "column_title": None,
+                "title": "No details card",
+                "details": None,
+            }
+        ],
+    )
+
+    assert changed is True
+    serialized = serialize_board(board)
+    card = next(
+        c for c in serialized["cards"].values() if c["title"] == "No details card"
+    )
+    assert card["details"] == ""
+
+
+def test_apply_operations_null_title_is_rejected(db_session):
+    board = get_or_create_board(db_session, "user")
+    todo_column = next(c for c in board.columns if c.title == "To Do")
+    before_count = len(serialize_board(board)["cards"])
+
+    changed = apply_operations(
+        db_session,
+        board,
+        [
+            {
+                "type": "create_card",
+                "column_id": str(todo_column.id),
+                "title": None,
+                "details": None,
+            }
+        ],
+    )
+
+    assert changed is False
+    serialized = serialize_board(board)
+    assert len(serialized["cards"]) == before_count
+    titles = [c["title"] for c in serialized["cards"].values()]
+    assert "None" not in titles
+
+
 def test_chat_requires_auth(raw_client, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     res = raw_client.post("/api/chat", json={"message": "hi"})

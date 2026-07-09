@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,8 +13,16 @@ from app.board import router as board_router
 from app.chat import router as chat_router
 from app.db import init_db
 
+logger = logging.getLogger(__name__)
+
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", str(Path(__file__).parent / "static")))
-SESSION_SECRET = os.environ.get("SESSION_SECRET", "dev-secret-change-me")
+
+_DEFAULT_SESSION_SECRET = "dev-secret-change-me"
+SESSION_SECRET = os.environ.get("SESSION_SECRET", _DEFAULT_SESSION_SECRET)
+if SESSION_SECRET == _DEFAULT_SESSION_SECRET:
+    logger.warning(
+        "SESSION_SECRET is not set; using an insecure default. Set it in .env for any non-local deployment."
+    )
 
 
 @asynccontextmanager
